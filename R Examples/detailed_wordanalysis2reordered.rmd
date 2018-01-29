@@ -1,0 +1,499 @@
+---
+title: "Further Analysis of all BBT Messages, Focus on keywords: Behavior(s), Milestones, Toddler(s)"
+author: "Kat"
+date: "1/11/2018"
+output: 
+  html_document:
+    pdf_document:
+      keep_md: true
+---
+
+* Note: Spelling, Stems, and Plurals will look wrong because data was cleaned to remove punctuation and numbers.
+
+* 0.1 Total & Omitted Messages
+
+* 1.1 Total Number of "Behavior(s)" Messages
+* 1.2 Total Number of "Behavior(s)" Messages with CTR >= 15%
+* 1.3 Total Number of "Behavior(s)" Messages with CTR < 15%
+
+* 2.1 Total Number of "Milestones" Messages
+* 2.2 Total Number of "Milestones" Messages with CTR >= 15%
+* 2.3 Total Number of "Milestones" Messages with CTR < 15%
+
+* 3.1 Total Number of "Toddler(s)" Messages
+* 3.2 Total Number of "Toddler(s)" Messages with CTR >= 15%
+* 3.3 Total Number of "Toddler(s)" Messages with CTR < 15%
+
+* 4.1 Total Number of "Babies" Messages
+* 4.2 Total Number of "Babies" Messages with CTR >= 15%
+* 4.3 Total Number of "Babies" Messages with CTR < 15%
+
+* 5.1 Total Number of "Fun" Messages
+* 5.2 Total Number of "Fun" Messages with CTR >= 15%
+* 5.3 Total Number of "Fun" Messages with CTR < 15%
+
+* 6.1 Total Number of "Development" Messages
+* 6.2 Total Number of "Development" Messages with CTR >= 15%
+* 6.3 Total Number of "Development" Messages with CTR < 15%
+
+* 7.1 Total Words in Messages with CTR >=15%, stop words removed
+* 7.2 Total Words in Messages with CTR <7%, stop words removed
+* 7.3 Words Unique to CTR >=15%
+
+* 8.1 Milestone Messages Over Time
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
+```
+
+```{r, message=FALSE, echo=FALSE}
+# First, I loaded in the Data and took out empty rows at the bottom of the spreadsheet. (see .rmd file for code)
+rm(list = ls())
+options(java.parameters = "-Xmx4g")
+library(rJava)
+library(xlsx)
+library(dplyr)
+library(tidytext)
+library(ggplot2)
+library(stringi)
+library(SnowballC)
+library(tidyverse)
+library(gdata)
+
+files <- list.files("BBT Message Library 1.9.2018", pattern = "*.xlsx")
+for (i in seq_along(files)) {
+    wb <- loadWorkbook(...)
+    ...
+    rm(wb)
+    xlcFreeMemory()  # <= free Java Virtual Machine memory !
+}
+
+
+bbt <- read.xlsx2("BBT Message Library 1.9.2018.xlsx", sheetIndex=1, header=TRUE)
+
+```
+
+```{r, echo=FALSE}
+# Read in Tagged Messages
+files <- list.files("taggedmessages8", pattern = "*.xlsx")
+for (i in seq_along(files)) {
+    wb <- loadWorkbook(...)
+    ...
+    rm(wb)
+    xlcFreeMemory()  # <= free Java Virtual Machine memory !
+}
+bbt_tagged <- read.xlsx("taggedmessages.xlsx", sheetIndex=1, header=TRUE)
+```
+
+#### 0.1 Total & Omitted Messages
+- There were originally 630 messages
+- 10 onboarding messages were removed (Month <0), leaving 620 for analysis
+```{r}
+# Convert to UTF8, subset required columns
+bbt$English.Message <- iconv(bbt$English.Message, "UTF-8", "UTF-8")
+bbt_tagged$English.Message <- iconv(bbt_tagged$English.Message, "UTF-8", "UTF-8")
+#nrow(bbt) 630 original rows
+# for the rest of bbt_tagged see section 5
+
+#subset required columns
+bbt2 <- bbt[,c(1, 2, 3, 5, 6, 7)] # Keep Month, Day, English.Message, English.Link.Views, English.Link.Ctr, English.Title
+
+#subset messages with month <0 for BBT (on boarding messages)
+bbt2$Month <- as.numeric(levels(bbt2$Month))[bbt2$Month]
+bbt2$English.Link.CTR <- as.numeric(levels(bbt2$English.Link.CTR))[bbt2$English.Link.CTR]
+onboarding <- subset(bbt2, Month <0)
+onboarding$English.Message
+
+#dataset exluding onboarding messages
+bbt2 <- subset(bbt2, Month >=0)  #10 rows removed as onboarding messages
+rm(bbt)
+```
+
+```{r}
+#colnames(bbt2)
+```
+
+```{r}
+bbt3<- as.data.frame(bbt2)
+bbt3$English.Message <- gsub("BBT: ", "", bbt3$English.Message)
+# milestones messages without numbers removed
+p <- grep("milestones", bbt3$English.Message, ignore.case=TRUE)
+milestone=NULL
+for (i in p) {
+  milestone=rbind(milestone,(bbt3[i,]))
+} 
+#e[, c(1,3,5)]  #to double check accuracy of subset & variables with CTR
+#milestone$English.Message
+
+```
+
+
+```{r, echo=FALSE}
+#convert to data frame, fit typos
+bbt3<- as.data.frame(bbt2)
+bbt3$English.Message <- gsub("BBT: ", "", bbt3$English.Message)#subset out ignoring messages above & remove BBT: in text.message
+bbt3$English.Message <- gsub("'s", "", bbt3$English.Message) # remove 's
+bbt3$English.Message <- gsub("[^[:alpha:]]", " ", bbt3$English.Message)
+
+```
+
+### 1.1 Total Messages with "Behavior(s)", "Milestones" and "Toddler(s)" 
+- 19 total messages with behavior/behaviors
+```{r}
+
+p <- grep("behaviors|behavior", bbt3$English.Message, ignore.case=TRUE)
+f=NULL
+for (i in p) {
+  f=rbind(f,(bbt3[i,]))
+}
+#f[, c(1,3,5)]   #to double check accuracy of subset & variables with CTR
+f$English.Message
+
+```
+### 1.2 Messages with "Behavior(s)" with Click-Through-Rate(CTR) greater than 15%
+- 182 Messages have CTR >=15%
+- 12 of the 19 "behavior(s)" messages have CTR greater than 15%
+```{r}
+bbt3High <- subset(bbt3, English.Link.CTR >= 0.15)
+p <- grep("behavior|behaviors|Behavior|Behaviors", bbt3High$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3High[i,]))
+} 
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+g$English.Message
+
+```
+
+### 1.3 Messages with "Behavior(s)" with Click-Through-Rate(CTR) less than 15%
+- 7 of the 19 "behavior(s)" messages have CTR less than 15%, but the CTR rates were only a little lower with a range from 12-14%
+```{r}
+bbt3Less <- subset(bbt3, English.Link.CTR < 0.15)
+p <- grep("behavior|behaviors|Behavior|Behaviors", bbt3Less$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3Less[i,]))
+} 
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+#mean(g$English.Link.CTR)
+g$English.Message
+```
+
+
+#### 2.1 Total messages with word Milestone - 8 total messages with word milestones
+- 8 total messages with milestones
+```{r}
+
+p <- grep("milestones", bbt3$English.Message, ignore.case=TRUE)
+e=NULL
+for (i in p) {
+  e=rbind(e,(bbt3[i,]))
+} 
+#e[, c(1,3,5)]  #to double check accuracy of subset & variables with CTR
+#e$English.Message
+milestone$English.Message #to include all #s
+```
+
+#### 2.2 Milestones Messages with Click-Through-Rate(CTR) greater than 15%
+- 182 Messages have CTR >=15%
+- All "Milestones" messages have a CTR greater than 15%
+```{r}
+p <- grep("milestones", bbt3High$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3High[i,]))
+}
+#g[, c(1,3,5)]  #to double check accuracy of subset & variables with CTR
+#g$English.Message
+milestone$English.Message # to include #s
+```
+#### 2.3 Milestones Messages with Click-Through-Rate(CTR) less than 15%
+- All "Milestones" messages have a CTR less than 15% (so none in this section)
+```{r}
+p <- grep("milestones", bbt3Less$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3Less[i,]))
+} 
+#g[, c(1,3,5)]  #to double check accuracy of subset & variables with CTR
+g$English.Message
+```
+
+#### 3.1 Total messages with word Toddler/s - 36 total messages with word toddler/toddlers
+- 36 total messages with toddler(s)
+```{r}
+p <- grep("toddler|toddlers|Toddler|Toddlers", bbt3$English.Message, ignore.case=TRUE)
+d=NULL
+for (i in p) {
+  d=rbind(d,(bbt3[i,]))
+} 
+#d[, c(1,3,5)]  #to double check accuracy of subset & variables with CTR
+d$English.Message
+```
+
+#### 3.2 Toddler(s) Messages with Click-Through-Rate(CTR) greater than 15%
+- 182 Messages have CTR >=15%
+- 24 of the 36 "toddler(s)" messages have CTR greater than 15%
+```{r}
+p <- grep("toddler|toddlers|Toddlers|Toddler", bbt3High$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3High[i,]))
+}
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+g$English.Message
+```
+#### 3.3 Toddler(s) Messages with Click-Through-Rate(CTR) less than 15%
+- 12 of the 36 "toddler(s)" messages have CTR less than 15%. The range of the CTR for those 12 messages is 7-14%, with an average of 11.6 and median of 12.
+```{r}
+p <- grep("toddler|toddlers|Toddlers|Toddler", bbt3Less$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3Less[i,]))
+} 
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+#mean(g$English.Link.CTR)
+#median(g$English.Link.CTR)
+g$English.Message
+```
+
+#### 4.1 Total Message with word "babies"
+- 14 messages with babies
+- 92 messages with baby
+```{r, echo=FALSE}
+p <- grep("babies|baby", bbt3$English.Message, ignore.case=TRUE)
+a <- grep("baby", bbt3$English.Message, ignore.case=TRUE)
+b <- grep("baby's", bbt3$English.Message, ignore.case=TRUE)
+d=NULL
+for (i in p) {
+  d=rbind(d,(bbt3[i,])) #babies
+} 
+e=NULL
+for (i in a) {
+  e=rbind(e,(bbt3[i,])) #baby
+}
+
+f=NULL
+for (i in b) {
+  f=rbind(f,(bbt3[i,])) #baby's
+}
+
+#d[, c(1,3,5)]  #to double check accuracy of subset & variables with CTR
+#length(d$English.Message) #14 messages with "babies"
+#length(e$English.Message) # 92 messages with "baby"
+#length(f$English.Message) # 0 messages with baby's b/c I took out 's
+#d[!(d %in% e)]
+d$English.Message        
+```
+#### 4.2 Babies Messages with Click-Through-Rate(CTR) greater than 15%
+- 182 Messages have CTR >=15%
+- 12 of the 14 "babies" messages have CTR greater than 15%
+```{r}
+p <- grep("babies", bbt3High$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3High[i,]))
+}
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+g$English.Message
+
+```
+#### 4.3 Babies Messages with Click-Through-Rate(CTR) less than 15%
+- There are 2 messages with the word "babies" with CTR less than 15% ; one message has no Link, the other is pre-natal message
+```{r}
+p <- grep("babies", bbt3Less$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3Less[i,]))
+} 
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+mean(g$English.Link.CTR)
+median(g$English.Link.CTR)
+g
+```
+
+#### 5.1 Total Messages with word "fun"
+- 50 total messages with "fun"
+```{r, echo=FALSE}
+p <- grep("fun", bbt3$English.Message, ignore.case=TRUE)
+d=NULL
+for (i in p) {
+  d=rbind(d,(bbt3[i,])) #fun
+} 
+d$English.Message
+```
+#### 5.2 Fun Messages with Click-Through-Rate(CTR) greater than 15%
+- 182 Messages have CTR >=15%
+- 15 of the 50 "fun" messages have CTR greater than 15%
+- The mean age a >15% "fun" message is sent is 17 months. The median age is 15 months.
+```{r}
+p <- grep("fun", bbt3High$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3High[i,]))
+}
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+g$English.Message
+#mean(g$Month)
+#median(g$Month)
+
+```
+#### 5.3 Fun Messages with Click-Through-Rate(CTR) less than 15%
+- 35 of the 50 messages with the word "fun" have CTR <15% - this is the majority of messages!
+- The mean and median of a "fun" message is 10%.
+- The mean age that a "fun" message is sent is 33 months. The median age is 36. (Compared to 17/15 for "fun" messages with CTR >15%)
+- Possibly, users are not clicking on the message because it says "fun" but rather a few fun messages are sent earlier in the child's life.
+```{r}
+p <- grep("fun", bbt3Less$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3Less[i,]))
+} 
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+#mean(g$Month)
+#median(g$Month)
+g$English.Message
+```
+
+#### 6.1 Total Messages with word "development"
+- 27 total messages with "development"
+```{r, echo=FALSE}
+p <- grep("development", bbt3$English.Message, ignore.case=TRUE)
+d=NULL
+for (i in p) {
+  d=rbind(d,(bbt3[i,])) #development
+} 
+d$English.Message
+```
+
+#### 6.2 Development Messages with Click-Through-Rate(CTR) greater than 15%
+- 6 of the 14 (>15%) Development messages also contain "milestones" 
+```{r}
+p <- grep("development", bbt3High$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3High[i,]))
+}
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+g$English.Message
+
+```
+
+#### 6.3 Development Messages with Click-Through-Rate(CTR) less than 15%
+- 13 of the 27 development messages have CTR <15%
+- But, development messages still have a mean CTR of 12% and median of 14%. This is probably because many of the milestones messages contain the word development.
+- Mean age of message sent is 33 months. Median age is 40 months.
+```{r}
+p <- grep("development", bbt3Less$English.Message, ignore.case=TRUE)
+g=NULL
+for (i in p) {
+  g=rbind(g,(bbt3Less[i,]))
+} 
+#g[, c(1,3,5)] #to double check accuracy of subset & variables with CTR
+#mean(g$English.Link.CTR)
+#median(g$English.Link.CTR)
+g$English.Message
+```
+
+
+#### 7.1 There are 42 total words (with stop words removed) from messages with CTR >= 15%
+```{r, message=FALSE}
+#bbt3High >=15%
+bbt_dfH <- data_frame(line=nrow(bbt3High), text=bbt3High$English.Message, CTR=bbt3High$English.Link.CTR)
+
+## use tidytext to unnest all Text messages per line,  unest words, and unjoin stop words (INCLUDES ALL)
+bbt_dfH <- bbt_dfH %>% unnest_tokens(word, text) %>% anti_join(stop_words) %>%
+  count(word, sort=TRUE) %>% 
+  filter(n>5) %>%  
+  mutate(word=reorder(word, n))
+#bbt_dfH
+```
+
+#### 7.2 There are 29 total words (with stop words removed) from messages with CTR <= 7% (Lowest CTR rates)
+```{r, message=FALSE}
+bbt3Low <- subset(bbt3, English.Link.CTR <= 0.07)
+bbt_dfL <- data_frame(line=nrow(bbt3Low), text=bbt3Low$English.Message, CTR=bbt3Low$English.Link.CTR)
+
+## use tidytext to unnest all Text messages per line,  unest words, and unjoin stop words (INCLUDES ALL)
+bbt_dfL <- bbt_dfL %>% unnest_tokens(word, text) %>% anti_join(stop_words) %>%
+  count(word, sort=TRUE) %>% 
+  filter(n>5) %>%  
+  mutate(word=reorder(word, n))
+#bbt_dfL
+
+```
+#### 7.3 Unique Words to CTR >= 15%
+- There are 10 words that are common to both CTR >=15% and CTR <=7% (child    learn    baby     tips     time     talk     teeth    children reading  healthy)
+- There are 32 unique words to CTR >=15% (Ignore "42 Levels" below)
+```{r}
+#####What are Common words from CTR <= 7% and CTR >=15 %?
+wordStop15H<- bbt_dfH$word # words from high CTR
+wordStop15L <- bbt_dfL$word # words from low CTR
+
+JointWORD_stop <- wordStop15H[wordStop15H %in% wordStop15L] # what high words are in low words?
+
+uniqueWORD_stop <- wordStop15H[!(wordStop15H %in% JointWORD_stop)]
+uniqueWORD_stop
+```
+
+
+```{r}
+#### 5.1 Milestone Messages Over Time  - updated with both types of messages below
+# p <- grep("milestones", bbt3High$English.Message, ignore.case=TRUE)
+# g=NULL
+# for (i in p) {
+#   g=rbind(g,(bbt3High[i,]))
+# }
+# #g[, c(1,3,5)]  #to double check accuracy of subset & variables with CTR
+# #g$English.Message
+# milestone$English.Message #to include #s in milestone messages for references
+# 
+# ggplot(data=g, aes(x=Month, y=English.Link.CTR))+
+#   geom_point() +
+#   ggtitle("Are Users Clicking on Milestone Messages Less As Their Child Ages?")+
+#   xlab("Child's Age in Months")+
+#   ylab("Click-Through Rate Per Message")
+
+```
+
+#### 8.1 Milestone Message Over Time
+- 19 total messages identified by Lynn as a "Milestones" Message
+- From analysis above, 8 of these message have the word "milestones" (aqua) included in the text message, leaving 11 messages identified as milestone message without have "Milestones" in the actual text message (coral)
+- Aqua "milestone2" messages are those that HAVE the word "milestones" in the actual text message
+- Coral "milestone" messages are those that DO NOT have the word "milestones" in the actual text message
+- Milestone2(aqua) messages have been around longer and have Click Views ranging from 398 to 724, while Milestone (coral) messages have a range of 51 to 610. 
+- Of Milestone(coral) labeled messages, the highest Views and CTRs are when the child is aged 23, 26, 32 with Views of 610, 455, and 321, and CTR of 24%, 18%, and 15%.
+- The stats on the remaining 8 Milestone(coral) messages are: Views ranging from 29-80, and CTR ranging from 7-14%. These may grow as subscribers's children reach these older ages.
+
+```{r}
+bbt_tagged2 <- bbt_tagged[,c(1, 2, 3, 4, 6, 7, 8)]  #removing necessary columns
+#bbt_tagged2
+
+# finding messages with the word milestone in them
+   p <- grep("milestones", bbt_tagged2$English.Message, ignore.case=TRUE)
+milestone=NULL
+for (i in p) {
+  milestone=rbind(milestone,(bbt_tagged2[i,]))
+}
+# assign specific type to milestone word messages
+milestone$Type <- "milestone2"
+#milestone #milestone worded messages only
+
+#hack way of combining above with all message - could not figure out how to do if/then statement 
+# filter out milestone & milestone2, plot results
+whole <- rbind(bbt_tagged2, milestone)  # combine all with milestone worded messages only
+milestones <- whole[9:53,]  #remove unlabeled messages
+milestones <- as.data.frame(milestones) # filter out only milestone messages
+milestones %>%
+  filter(Type == "milestone2" | Type =="milestone") %>%
+  ggplot(aes(x=Month, y=English.Link.CTR, color=Type))+
+  geom_point() + 
+  ggtitle("CTR for Milestone Identified & Labeled Messages As Child Ages")+
+  xlab("Child's Age in Months")+
+  ylab("CTR")+
+  scale_fill_discrete(labels=c("No Milestones in Message", "Milestones in message"))
+
+milestone$English.Message  # for reference with graph
+```
+
+

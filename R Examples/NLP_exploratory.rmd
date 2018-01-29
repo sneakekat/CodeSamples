@@ -1,0 +1,327 @@
+---
+title: "Capstone Corpus Exploratory Analysis & Project Plan"
+author: "kat"
+date: "January 5, 2018"
+output: html_document
+---
+
+```{r, message=FALSE, echo=FALSE}
+# clear workspace & remove variables
+#knitr::opts_chunk$set(echo=FALSE)
+rm(list = ls())
+
+library(quanteda)
+library(ggplot2)
+library(wordcloud)
+```
+## Overall Goal
+#### The overall goal of this project is to read in and complete Exploratory Data Analysis on three documents (Blogs, News, and Twitter) for the purpose of creating a text prediction model. The Exploratory Data Analysis, with code, that I performed can be found in Appendices A-F. 
+
+#### Twitter has the most individual texts compared to Blogs and News, but Blogs generally has the longer sized texts. The Blog document may be more useful since it has a higher collection of longer sentences. The most common words in each of the documents are those that are most common in the English language (the,it, be). If I were doing text analysis for another purpose, I might remove these so-called stop-words, but I need to keep them if I am going to predict entire sentences in my model.
+
+
+```{r, echo=FALSE}
+### Reading in US Blogs
+file <- ("./Coursera-SwiftKey/final/en_US/en_US.blogs.txt")
+con <- file(description=file, open="r") 
+line <- readLines(con, encoding="UTF-8")   # ADDING ENCODING HERE FIXED MY ISSUE!!!!!!!!!!!! FOR TEXT.... :(  now do to fix 
+close(con)
+
+#Reading in US News
+file2 <- ('./Coursera-SwiftKey/final/en_US/en_US.news.txt')
+con2 <- file(description=file2, "rb") 
+line2 <- readLines(con2, n=-1, warn=TRUE, skipNul = TRUE, encoding="UTF-8")
+close(con2)
+
+#Reading in US Twitter 
+file3 <- ('./Coursera-SwiftKey/final/en_US/en_US.twitter.txt')
+con3 <- file(description=file3) 
+line3 <- readLines(con3, n=-1, warn=TRUE, skipNul = TRUE, encoding="UTF-8")
+close(con3)
+
+```
+
+```{r, echo=FALSE}
+### Taking 10% sample of each data##until I get a working model for speed sake...then increase up to 25%?
+# .10% sample of BLOGS 90,000
+#0.10 * length(line)
+blogS <- sample(line, 90000)
+# .10% sample of NEWS is 101000
+#0.10 * length(line2)
+newsS <-  sample(line2, 101000)
+# 10% sample of TWITTER is 236000
+#0.10 * length(line3)
+twitterS <-  sample(line3, 236000)
+
+```
+
+
+#### This is where I attempted to tag the source of the document, but when I tried to subset corpus by source, it would not give me anything for a source other than blog. I'm not sure I really need this, but it was one feature I was not able to figure out in quanteda. *See Appendix C for code
+```{r, echo=FALSE}
+#Creating corpus Document, labels did not "stick" or I haven't figured out how to correctly subset
+myCorpus <- corpus(blogS)
+docvars(myCorpus, "Source") <- "blog"
+#summary(myCorpus)
+
+myCorpus2 <- corpus(newsS)
+docvars(myCorpus2, "Source") <- "news"
+#summary(myCorpus2)
+
+myCorpus3 <- corpus(twitterS)
+docvars(myCorpus3, "Source") <- "twitter"
+#summary(myCorpus3)
+
+allCorpus <- myCorpus + myCorpus2 + myCorpus3
+#tail(summary(allCorpus))
+
+```
+
+
+## To get a sense of what each document type looks like, here is the Individual text with longest length from each document type (in order: Blog, News, Twitter)
+```{r, echo=FALSE}
+tokenInfoB <- summary(myCorpus)
+b<- tokenInfoB[which.max(tokenInfoB$Tokens),]
+texts(blogS)[b$Tokens] # longest length text in my blog sample
+
+tokenInfoN <- summary(myCorpus2)
+c <- tokenInfoN[which.max(tokenInfoN$Tokens),]
+texts(newsS)[c$Tokens] # longest length text in my news sample
+
+tokenInfoT <- summary(myCorpus3)
+d<- tokenInfoT[which.max(tokenInfoT$Tokens),]
+texts(twitterS)[d$Tokens] # longest length text in my twitter sample
+
+```
+
+
+## Plot to see most frequent words in Blogs, News & Twitter
+#### I see there is what I'm assuming is a space as the most frequent character. I haven't looked into how to remove this. I didn't see this affect the n_grams, but maybe it will later.
+```{r, echo=FALSE}
+swearwords <- readLines("swearWords.txt", encoding="UTF-8")
+
+#blogs
+dfm_Blog <- dfm(myCorpus, tolower = TRUE, remove_punct=TRUE, remove=swearwords)
+features_blog_dfm <- textstat_frequency(dfm_Blog, n=25)
+features_blog_dfm$feature <- with(features_blog_dfm, reorder(feature, -frequency))
+ggplot(features_blog_dfm, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 25 Most Frequenct Words in Blogs Document")
+
+#news
+dfm_Blog2 <- dfm(myCorpus2, tolower = TRUE, remove_punct=TRUE, remove=swearwords)
+features_blog_dfm2 <- textstat_frequency(dfm_Blog2, n=25)
+features_blog_dfm2$feature <- with(features_blog_dfm2, reorder(feature, -frequency))
+ggplot(features_blog_dfm2, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 25 Most Frequenct Words in News Document")
+
+#twitter
+dfm_Blog3 <- dfm(myCorpus3, tolower = TRUE, remove_punct=TRUE, remove=swearwords)
+features_blog_dfm3 <- textstat_frequency(dfm_Blog3, n=25)
+features_blog_dfm3$feature <- with(features_blog_dfm3, reorder(feature, -frequency))
+ggplot(features_blog_dfm3, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 25 Most Frequenct Words in Twitter Document")
+```
+
+```{r, echo=FALSE}
+# playing with top features
+#topfeatures(dfm_Blog)
+```
+
+
+## Which 2 words (N-grams) appear the most in all documents (Blogs, News, & Twitter combined) 
+```{r, echo=FALSE}
+#Creating n-grams size 2 for prediction model, top 20
+
+dat.dfm <- dfm(allCorpus, remove=swearwords, ngrams=2, tolower = TRUE, remove_punct = TRUE, what = "fasterword", verbose = FALSE)
+#summary(topfeatures(dat.dfm, 20))
+#topfeatures(dat.dfm)
+
+dat.dfm2 <- textstat_frequency(dat.dfm, n=25)
+dat.dfm2
+dat.dfm2$feature <- with(dat.dfm2, reorder(feature, -frequency))
+ggplot(dat.dfm2, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 25 N-grams, size 2")
+```
+
+## Which 3 words (N-grams) appear the most in all documents (Blogs, News, & Twitter combined)
+```{r, echo=FALSE}
+dat.dfm3 <- dfm(allCorpus, remove=swearwords, ngrams=3, tolower = TRUE, remove_punct = TRUE, what = "fasterword", verbose = FALSE)
+#summary(topfeatures(dat.dfm3, 20))
+#topfeatures(dat.dfm3)
+
+dat.dfm3 <- textstat_frequency(dat.dfm, n=25)
+dat.dfm3
+dat.dfm3$feature <- with(dat.dfm3, reorder(feature, -frequency))
+ggplot(dat.dfm3, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 25 N-grams, size 3")
+```
+
+## Next Steps - I realize not every non-data scientist will understand, but maybe there's a linguist with some thoughts out there?
+#### I need to read up on Katz's Backoff Model for NLP and figure out how to use the n-grams I created for a prediction model. Once I have that, I need to create a shiny app that allows the user to input a set of words and spits out a prediction of the next word (or words???) based on the model I create. Basically, a lot of magic (aka hard word) needs to happen. Other questions I haven't answered that were posed are :
+1) How many unique words do you need in a frequency sorted dictionary to cover 50% of all word instances in the language? 90%? *I don't have the answer to this and am not sure I truly understand the question right now * 
+2) How will I deal with foreign languages *No idea right now* 
+3) How will I increase coverage to include words not in the corpora? *I could add another document, but why and what words? How do I know what's missing?*
+
+
+
+# Appendix
+## Preprocessing & EDA
+#### The following was done for pre-processing and exploratory data analysis
+- Use readLines to open connection to txt file, *encoding="UTF-8"* to avoid encoding issues with Windows *Appendix A*
+- Remove profanity words, used http://www.bannedwordlist.com/ *(see Appendix E (Plots) or Appendix F (N-grams) for code)*
+- Sampling : 10% of each document was taken for now. I will increase later when I have a working model. *Appendix B*
+- quanteda package was used to create one corpus for all three sets of documents (was not able to keep the labels created (blog, news, twitter) to "stay"" when I added the corpuses together, meaning when I tried to subset, I can't filter for news corpus because the label for this doesn't seem to be there or maybe I didn't actually add them together? - *Appendix C* *any help with this is appreciated*
+- Longest text by document type *Appendix D* 
+- Basic plot of most frequent words per document type  *Appendix E*
+-punctuation was removed for all three documents *(see Appendix E (Plots) or Appendix F (N-grams) for code)*
+- N-grams of size 2 & 3 were created *Note: This took a while so I scaled back the sample size from 25% to 10% until I get a working model*  *Appendix F* 
+
+
+
+>
+A
+```{r}
+# clear workspace & remove variables
+#knitr::opts_chunk$set(echo=TRUE)
+#rm(list = ls())
+
+library(quanteda)
+library(ggplot2)
+library(wordcloud)
+```
+
+```{r, eval=FALSE, echo=TRUE}
+### Reading in US Blogs
+file <- ("./Coursera-SwiftKey/final/en_US/en_US.blogs.txt")
+con <- file(description=file, open="r") 
+line <- readLines(con, encoding="UTF-8")   # ADDING ENCODING HERE FIXED MY ISSUE!!!!!!!!!!!! FOR TEXT.... :(  now do to fix 
+close(con)
+
+#Reading in US News
+file2 <- ('./Coursera-SwiftKey/final/en_US/en_US.news.txt')
+con2 <- file(description=file2, "rb") 
+line2 <- readLines(con2, n=-1, warn=TRUE, skipNul = TRUE, encoding="UTF-8")
+close(con2)
+
+#Reading in US Twitter 
+file3 <- ('./Coursera-SwiftKey/final/en_US/en_US.twitter.txt')
+con3 <- file(description=file3) 
+line3 <- readLines(con3, n=-1, warn=TRUE, skipNul = TRUE, encoding="UTF-8")
+close(con3)
+
+```
+
+>
+B
+
+```{r, eval=FALSE, echo=TRUE}
+### Taking 10% sample of each data##until I get a working model for speed sake...then increase up to 25%?
+# .10% sample of BLOGS 90,000
+0.10 * length(line)
+blogS <- sample(line, 90000)
+# .10% sample of NEWS is 101000
+0.10 * length(line2)
+newsS <-  sample(line2, 101000)
+# 10% sample of TWITTER is 236000
+0.10 * length(line3)
+twitterS <-  sample(line3, 236000)
+
+```
+
+>
+C
+```{r, echo==TRUE, eval=FALSE}
+#Creating corpus Document, labels did not "stick" or I haven't figured out how to correctly subset. I might not need this in the end, but I wanted it for EDA
+myCorpus <- corpus(blogS)
+docvars(myCorpus, "Source") <- "blog"
+#summary(myCorpus)
+
+myCorpus2 <- corpus(newsS)
+docvars(myCorpus2, "Source") <- "news"
+#summary(myCorpus2)
+
+myCorpus3 <- corpus(twitterS)
+docvars(myCorpus3, "Source") <- "twitter"
+#summary(myCorpus3)
+
+allCorpus <- myCorpus + myCorpus2 + myCorpus3
+tail(summary(allCorpus))
+```
+
+>
+D
+
+```{r, echo=TRUE, eval=FALSE}
+tokenInfoB <- summary(myCorpus)
+b <- tokenInfoB[which.max(tokenInfoB$Tokens),]
+texts(blogS)[b$Tokens] # longest length text in my blog sample
+
+tokenInfoN <- summary(myCorpus2)
+c <- tokenInfoN[which.max(tokenInfoN$Tokens),]
+texts(newsS)[c$Tokens] # longest length text in my news sample
+
+tokenInfoT <- summary(myCorpus3)
+d<- tokenInfoT[which.max(tokenInfoT$Tokens),]
+texts(twitterS)[d$Tokens] # longest length text in my twitter sample
+
+```
+
+>
+E
+
+```{r, echo=TRUE, eval=FALSE}
+## Plot of most frequent words in Blogs, News & Twitter
+#blogs
+dfm_Blog <- dfm(myCorpus, tolower = TRUE, remove_punct=TRUE, remove=swearwords)
+features_blog_dfm <- textstat_frequency(dfm_Blog, n=100)
+features_blog_dfm$feature <- with(features_blog_dfm, reorder(feature, -frequency))
+ggplot(features_blog_dfm, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 100 Most Frequenct Words in Blogs Document")
+
+#news
+dfm_Blog2 <- dfm(myCorpus2, tolower = TRUE, remove_punct=TRUE, remove=swearwords)
+features_blog_dfm2 <- textstat_frequency(dfm_Blog2, n=100)
+features_blog_dfm2$feature <- with(features_blog_dfm2, reorder(feature, -frequency))
+ggplot(features_blog_dfm2, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 100 Most Frequenct Words in News Document")
+
+#twitter
+dfm_Blog3 <- dfm(myCorpus3, tolower = TRUE, remove_punct=TRUE, remove=swearwords)
+features_blog_dfm3 <- textstat_frequency(dfm_Blog3, n=100)
+features_blog_dfm3$feature <- with(features_blog_dfm3, reorder(feature, -frequency))
+ggplot(features_blog_dfm3, aes(x=feature, y=frequency))+
+  geom_point() + 
+  theme(axis.text.x=element_text(angle = 90, hjust=1))+
+  ggtitle("Top 100 Most Frequenct Words in Twitter Document")
+```
+
+>
+F
+
+
+```{r, echo=TRUE, eval=FALSE}
+### Creating n-grams size 2 for prediction model
+dat.dfm <- dfm(allCorpus, remove=swearwords, ngrams=2, tolower = TRUE, remove_punct = TRUE, what = "fasterword", verbose = FALSE)
+summary(topfeatures(dat.dfm, 20))
+topfeatures(dat.dfm)
+
+#Creating n-grams size 3 for prediction model
+dat.dfm3 <- dfm(allCorpus, remove=swearwords, ngrams=3, tolower = TRUE, remove_punct = TRUE, what = "fasterword", verbose = FALSE)
+summary(topfeatures(dat.dfm3, 20))
+topfeatures(dat.dfm3)
+```
+
+
