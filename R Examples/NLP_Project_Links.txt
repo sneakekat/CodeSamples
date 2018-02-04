@@ -1,0 +1,6 @@
+For Shiny presentation:
+http://rpubs.com/sneakekat/356240
+
+
+Shiny Next Word Predict-ROAR app:
+https://sneakekat.shinyapps.io/next_word_predictor/
