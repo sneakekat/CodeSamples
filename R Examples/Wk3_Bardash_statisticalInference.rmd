@@ -1,0 +1,495 @@
+---
+title: "Week 3 Statistical Inference"
+author: "Yekaterina Bardash"
+date: "November 5, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+rm(list=ls())
+```
+
+### Question 1. 
+Each student in a large statistics class of 600 students is asked to toss a fair coin 100 times, count the resulting number of Heads, and construct a 0.95-level confidence interval for the probability of Heads. Assume that each student uses a fair coin and constructs the confidence interval correctly. **True or False: We would expect approximately 570 of the confidence intervals to contain the number 0.5.**
+
+#### **ANSWER:** 
+True. A 95% confidence interval states that you are 95% confident that the true mean lies within the interval. So if we repeated the experiment 100 times as in the case above, we should expect that the true mean of 0.5 will show up in 95% of the trials, or .95 of 600 is 570.
+
+Ho: p=0.5 (fair coin)
+Ha: p $\neq$ 0.5  - meaning true mean is either less than or greater than 0.5
+alpha = 0.05
+
+I simulated the above experiment of 600 students flipping 100 coins for 100 times. I runningSig represents the number of times per simulation that the p-value was significant, thus rejecting the null hypothesis. The range of these values was 12 to 32 occurances that were significant. The mean was 21 occurances. For my simulation it was actually more than 570, this is a fair approximation.
+```{r}
+runningSig = c()
+for (j in 1:100){  #rerunning experiment above 100 times
+  significant = c()
+for (i in 1:600) { # for 600 students, flipping 100 coins each
+onestudent <- sample(c(0,1), size=100, replace=TRUE, prob=c(.5,0.5))
+
+results <-binom.test(sum(onestudent), n=100, p=0.5, alternative="two.sided")
+
+  if (results$p.value < 0.05){
+   pval <- results$p.value
+    #print(pval)
+    significant <- c(significant , pval)
+  #print(results$p.value) # if p value is greater than 0.05, then add
+   # print(length(significant))
+}
+}
+   runningSig <- c(runningSig, length(significant))
+}
+
+runningSig
+
+range(runningSig)
+mean(runningSig)
+```
+
+```{r}
+range(runningSig)
+mean(runningSig)
+```
+
+### Question 2. 
+A company that manufactures light bulbs has advertised that its 75- watt bulbs burn an average of 800 hours before failing. In reaction to the company’s advertising campaign, several dissatisfied customers have complained to a consumer watchdog organization that they believe the company’s claim to be exaggerated. The consumer organization must decide whether or not to allocate some of its financial resources to countering the company’s advertising campaign. So that it can make an informed decision, it begins by purchasing and testing 100 of the disputed light bulbs. In this experiment, the 100 light bulbs burned an average of x ̄ = 745.1 hours before failing, with a sample standard deviation of s = 238.0 hours. Formulate null and alternative hypotheses that are appropriate for this situation. Calculate a significance probability. Do these results warrant rejecting the null hypothesis at a significance level of α = 0.05?
+
+#### **ANSWER:**
+Hypothesis is below assuming that average burn time is normally distrubuted.
+
+Ho: $\mu$ = 800 ; The true mean of the lifespan of the lightbulbs is 800.
+Ha: $\mu$ < 800 ; The true mean of the lifespan of the lightbulbs is less than 800. 
+Note: We don't want to do a 2-tailed test here because we are interested in only if the lightbulbs are less than the advertised hours. 
+
+**Conclusion:** Since the probability of the mean value occuring in this sample from the given the mean and standard deviation is 40% and greater than the significant level of 0.05 that was desired, we fail to reject the hypothesis that the true mean of the lifespan of the lightbulbs is 800. This sample mean is likely to occur 40% of the time, so we can't say that the company is falsely advertising.
+```{r}
+mu = 800
+x = 745.1
+s = 238
+z = (x-mu)/s
+z
+pnorm(z)
+```
+
+### 3. Breakfast Cereal Investigation
+
+The Breafast Cereal data can be found at http://lib.stat.cmu.edu/datasets/1993.expo/cereal and additional information http://lib.stat.cmu.edu/datasets/1993.expo/.
+
+The purpose of this report is to investigate breakfast cereals in this dataset and make recommendations for consumers.
+
+```{r}
+library(data.table)
+cereal <- fread('http://lib.stat.cmu.edu/datasets/1993.expo/cereal')
+
+colnames(cereal) <- c("name", "mfr", "type", "calories", "proteinG", "fatG", 
+                      "sodiumMG", "fiberG", "carboG", "sugarsG", "shelf", "potassMG", "vitamins", "weightOC", "cupsPerServe")
+```
+
+### Finding missing values
+- Missing values are indicated with -1, so convert them to NA
+- Cups per Serving has the most missing values (9)
+- I will use the MICE package and predictive mean matching to impute the 5 categories of missing values. There are 12 rows with missing data in all.
+```{r}
+cereal[,c(4:15)][(cereal[,c(4:15)] <0 ),] <- NA
+
+#which rows are missing data?
+#cereal[!complete.cases(cereal),]
+
+#look for patterns in missing data 
+# reference https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
+library(mice)
+md.pattern(cereal)
+```
+
+```{r, echo=TRUE, results='hide'}
+#imput values using predictive mean matching "pmm"
+tempCereal <- mice(cereal, m=5, method="pmm", maxit= 50, seed=500)
+```
+
+- I will check various plots to make sure imputed values fit within the existing distributions for each variable.
+```{r}
+summary(tempCereal)
+
+tempCereal$imp$cupsPerServe
+
+#creates complete dataset for cereals
+cerealComp <- complete(tempCereal, 1)
+
+#check plot of imputed values - magenta is imputed, blue is observed
+xyplot(tempCereal, cupsPerServe ~ weightOC +potassMG + carboG +sugarsG, pch=18, cex=1)
+#check density plot
+densityplot(tempCereal)
+#individual points - did not work for me
+#stripplot(tempCereal, pch=20, cex=1.2)
+```
+
+### Inspecting Columns
+- Units are in the name of the category.
+- Type = Cold/hot
+- Manufacturer -  A=American Home Food Products, G=General Mills, K=Kelloggs, N=Nabisco, P=Post, Q=Quaker Oats, R=Ralston Purina
+- Display shelf (1,2,or 3, counting from the floor)
+- Vitamins & minerals (0,25,or 100, respectively indicating "none added", enriched often to 25% FDA recommended, 100% of FDA recommended)
+- Weight - of one serving
+
+```{r}
+summary(cereal)
+str(cerealComp)
+
+cerealComp[cerealComp$weightOC <= 0,]
+```
+
+### What are distributions of all numeric columns?
+- Calories is roughly normally distributed
+- Protein is skewed right, most cereals have less than 4 grams of protein
+- Fat is skewed right, most cereals have less than 3 grams of fat
+- Sodium has wide range, 0 to 300 mg, multi modal - 0, ~180, 200 have the highest counts
+- Fiber - skewed right, most cereals have less than 3 grams of fiber
+- Carbs - bimodal - 12-16 grams of carbs, then peak at 22 grams of carbs
+- Sugar - skewed right, mode at about 3 grams, up to 15 grams. 25 grams - women ; 37.5 grams - man
+- More cereals are on the 3rd shelf (closer to eye level) - abouve 35. About 20 are on shelf 1 and 2- on shelf 2.
+- Potassium - bimodal - peak around 40, 80, 110 (counts are low) - wide range 0 to ~330
+- Vitamins - Most cereals only provide 25% of vitams intake
+- Weight of one serving - typically 1 ounce 
+- Cups per serving - most around 1 cup per serving, some are less (could be b/c of calories?)
+
+```{r}
+library(ggplot2)
+
+#plotting histogram function
+plotHistFunc <- function(x, na.rm=TRUE){
+nm <- names(cerealComp)[4:15]
+for (i in seq_along(nm)) {
+  
+print(ggplot(cerealComp, aes_string(x=nm[i] ) )+
+  geom_histogram(stat="count"))
+  #xlab(nm[i])
+}
+}
+
+plotHistFunc(cerealComp)
+```
+
+### Are there linear relationship between variables, if so, what are correlations between them?
+- At a significance level of 0.95, which variables are strongly correlated?
+- Strongly Positively correlated (r > 0.8)
+    + Fiber & Potassium
+- Moderately Positively Correlated: (r >= 0.5)
+    + Calories + Fat
+    + Calories + Sugars
+    + Protein + Fiber
+    + Calories + Weight
+    + Potassium + Protein
+    
+Recommendations: Potassium is strongly positively correlated with Fiber, and moderately positively correlated with Protein. This may suggest that finding a cereal high in Potassium will also help you find those high in Fiber and Protein.
+```{r}
+library(corrplot)
+
+# get p-values for correlations
+res1 <- cor.mtest(cerealComp[,c(4:15)], conf.level=0.95)
+
+#plot the significant correlations
+M<- cor(cerealComp[,c(4:15)], use="complete.obs")
+        corrplot(M, order="hclust", type="upper", p.mat=res1$p)
+  
+corrplot.mixed(M, lower.col="black", number.cex=0.7, p.mat=res1$p)
+```
+
+## Inspect plots of significant and positively correlated pairs above
+
+- Calories + Fat - moderate, positive relationship, data looks to be interval
+- Potassium + Fiber - interesting and obviously strong positive relationship - WHY?
+- Calories + Sugars  - expected relationship, as sugar increases, calories increase
+
+
+```{r}
+
+ggplot(cerealComp, aes(x=calories, y=fatG) )+
+  geom_point(alpha=0.4) +
+  geom_jitter(width=.5, height=.1)
+
+
+plot(cerealComp$fiber, cerealComp$potassMG)
+plot(cerealComp$calories, cerealComp$sugars)
+
+```
+
+### Is there a statistically significant difference between the sugar content of cereals on the first, second and third shelves? (1 = 1 shelf from the floor, 2= 2nd shelf from floor, 3 = 3rd shelf from floor, or more eye level)
+
+- Ho: m1=m2=m3, when m represents the mean sugar content of a cereal on a particular shelf.
+- Ha: There is at least one difference among the three groups
+- I will conduct an ANOVA with alpha level of 0.05.
+
+**Conclusion:** With a p-value of 0.38 and at a 0.05 significance level, there is not a statistically significant difference between sugar content and shelf position.
+
+**Recommendation:** From this group of cereals, there is not a relationship between where cereals are placed and their sugar content.
+```{r}
+# boxplot of data
+boxplot(cerealComp$sugarsG ~ cerealComp$shelf, title="Sugar Content by Shelf")
+
+#anova
+res.aov <- aov(sugarsG ~ shelf, data= cerealComp)
+summary(res.aov)
+```
+
+### Is there a relationship between the manufacturer and a cereal's shelf?
+- Ho: Manufacturer is independent of shelf position
+- Ha: Manufacturer is not independent of shelf position
+- I will conduct a Chi-Square Test of Independence with an alpha 0.05.
+
+**Conclusion:** With a Chi-square statistic of 10 with 10 degrees of freedom, the p-value was 0.4. At the 95% significance level, I fail to reject the null hypothesis that the manufacturer is independent of shelf position. There does not seem to be an association between shelf position and manufacturer.
+
+**Recommendation:** If you have a favorite manufacturer, their cereals may not be located on the same shelf.
+```{r}
+
+# table of data
+table(cerealComp$mfr, cerealComp$shelf)
+
+#chi-square
+#use simulate.p.value = TRUE because some observations have very entries
+chisq.test(cerealComp$mfr, cerealComp$shelf, simulate.p.value = TRUE)
+chisq.test(cerealComp$mfr, cerealComp$shelf)
+
+```
+
+### Is there clustering among the cereals?
+- I will use k-means clustering to determine if there are natural groupings to cereals.
+- Only numerical data was used, so manufacturer and type were left out.
+```{r}
+library(factoextra)
+#reference clustering https://uc-r.github.io/kmeans_clustering
+
+
+set.seed(123)
+# find optimal number of clusters using within sum of square
+fviz_nbclust(cerealComp[,c(4:15)], kmeans, method="wss")
+
+# set seed for reproducibility, and select numerical columns only
+set.seed(20)
+k3 <- kmeans(cerealComp[,c(4:15)], centers= 3, nstart=25)
+
+```
+
+# Question for Dr. Siri - how would I pull out the rows that are in the overlapping clusters 1 & 3? I couldn't figure out how to do that. Here I could obviously visually inspect, but what if I had A LOT more points that it was hard to see? I read that this function does PCA, so I realize I'm only loking at 2 dimensions, and I'm pretty sure you can inspect results.
+
+- Cereal 20 (Cracklin Oat Bran) & 28 (Fruit_&_Fibre_Dates,_Walnuts,_and_Oats) is most representative of cluster 2
+- Cereals 69 (Frosted Mini Wheats, Maypo, Strawberry Fruit Wheats) are most representative of Cluster 3
+- Cereals 25 (Froot Loops) is most representative of Cluster 1 
+- There is some overlap between Cluster 1 and 3
+```{r}
+fviz_cluster(k3, data=cerealComp[,c(4:15)])
+
+
+k3
+
+#cerealComp[c(20,28),]
+#cerealComp[c(69),]
+#cerealComp[c(25),]
+```
+
+- Cluster 2 is high in Potassium and Sodium and almost equivalent levels of calories compared to other clusters
+- Cluster 1 is high in Sodium, even in calories with Cluster 2 and just above Cluster 3, and similar vitamin make up to Cluster 2. 
+- Cluster 3 has the lowest mean of vitamins compared to the other two. It has the lowest potassium, but also lowest sodium. It has slightly lower calories, and roughly the same  carbs as cluster 1.
+
+**Recommendation:** If you are trying to cut back of sodium, cereals in Cluster 3 are the way to go. They will generally be lower in calories as well, but at the expense of potatssium and vitamins.
+- Cereals in Cluster 2 have the lowest mean in carbs, but they are slightly higher in calories and sodium. This does come with a benefit of more potassium and more vitamins than Cluster 3.
+```{r}
+library(dplyr)
+
+# reference  https://medium.com/square-corner-blog/so-you-have-some-clusters-now-what-abfd297a575b
+
+ clusters <- cerealComp[,c(4:15)] %>% mutate(Cluster=k3$cluster)%>% 
+    group_by(Cluster) %>%
+    summarize_all("mean") 
+
+#clusters
+
+#gather data to be able to plot
+library(tidyr)
+long <- gather( clusters, "name", "value", 2:13)
+
+options(digits=2)
+
+#plot gathered data by category & cluster
+ggplot(long, aes(x=name, y=value, fill=factor(Cluster))) +
+  geom_bar( stat="identity", position="dodge") +
+  xlab("Nutrition Category") +
+  ylab("Mean Value in Cluster")+
+  ggtitle("Nutrition Category by Cluster") +
+  theme(axis.text.x = element_text(angle=45))
+```
+
+# Potassium vs Sodium
+- Looking at just these 2 variables separates the cereals well with no overlap
+- Depending on your nutritional needs, you could argue that cereals in Cluster 3 are ideal since they have generally average levels of Sodium, but generally have higher Potassium levels.
+
+**Recommendation:** If it is necessary to watch your sodium intake, you could pick cereals in Cluster 3 but at the expense of more Potassium. For these two variables, cereals in Cluster 1 are not a good choice as they are generally higher in sodium and lower in Potassium.
+```{r}
+
+cerealComp %>%
+  as_tibble() %>%
+  mutate(cluster = k3$cluster,
+         cerealComp = cerealComp$name) %>%
+ggplot(aes(sodiumMG, potassMG, color=factor(cluster), label=cerealComp )) +
+  geom_point() +
+  geom_text()
+
+```
+
+
+
+```{r, eval=FALSE}
+# below was attempt to find other combinations of easily seperable cereals, but they did not yield interesting results.
+
+cerealComp %>%
+  as_tibble() %>%
+  mutate(cluster = k3$cluster,
+         cerealComp = cerealComp$name) %>%
+ggplot(aes(sugarsG, vitamins, color=factor(cluster), label=cerealComp )) +
+  geom_point() +
+  geom_text() +
+  geom_jitter()
+
+
+cerealComp %>%
+  as_tibble() %>%
+  mutate(cluster = k3$cluster,
+         cerealComp = cerealComp$name) %>%
+ggplot(aes(carboG, calories, color=factor(cluster), label=cerealComp )) +
+  geom_point() +
+  geom_text()
+
+
+cerealComp %>%
+  as_tibble() %>%
+  mutate(cluster = k3$cluster,
+         cerealComp = cerealComp$name) %>%
+ggplot(aes(sugarsG, calories, color=factor(cluster), label=cerealComp )) +
+  geom_point() +
+  geom_text()
+
+```
+
+# Fiber vs Sugar
+**Recommendation:** If your diet requires more fiber, cereals in Cluster 2 are the way to go, but there are only a few that are low in sugar such as 100% Brain, All Bran, All Brans with Extra Fiber, and Bran Flakes.
+
+- Cluster 2 and 3 are not well separated on these 2 nutrition categories.
+```{r}
+cerealComp %>%
+  as_tibble() %>%
+  mutate(cluster = k3$cluster,
+         cerealComp = cerealComp$name) %>%
+ggplot(aes(fiberG, sugarsG, color=factor(cluster), label=cerealComp )) +
+  geom_point() +
+  geom_text()
+
+```
+
+
+### Are there cereals virtually identical in terms of sugar or fat?
+- The black line represents cereals with exactly the same sugar or fat. Cereals generally have more grams of sugar than fat with a few exceptions.
+
+**Recommendation:** The cereals with lowest sugar and fat content come from a select few cereals in Clusters 1 & 3, and a few in Cluster 2.
+```{r}
+
+cerealComp %>%
+  as_tibble() %>%
+  mutate(cluster = k3$cluster,
+         cerealComp = cerealComp$name) %>%
+ggplot(aes(fatG, sugarsG, color=factor(cluster), label=cerealComp )) +
+  geom_point() +
+  geom_text() +
+  geom_abline(intercept=0)+
+  ggtitle("Sugar & Fat by Cluster")
+
+cerealComp %>%
+ggplot(aes(fatG, sugarsG, color=factor(mfr)))+
+  geom_point()+
+  geom_jitter() +
+  ggtitle("Sugar & Fat by Manufacturer")
+
+
+#cereals in cluster 2 & 3, low in sugar, low in fat
+#cerealComp[cerealComp$sugarsG <=2 & cerealComp$fatG <=1,]
+```
+
+### What is the relationship between sugar and fat for cold and hot cereals?
+- There are only 3 hot cereals, but from the scatterplot you can see that hot cereals have are lower in sugar. We would need more data on hot cereals to tell if this result is statistically significant.
+```{r}
+cerealComp %>%
+ggplot(aes(fatG, sugarsG, color=factor(type)))+
+  geom_point()+
+  geom_jitter()
+
+table(cerealComp$type)
+```
+
+### Is there a statisically significant difference in sugar content by manufacturer?
+
+- Looking at the boxplot suggests there should be statistically significant differences. Manufacturers G, K, P, Q & R are within the same range, while A & N are on the low end.
+
+Ho: The means of sugar content for each manufacturer are all equal.
+Ha: THere are at least 2 manufacturers that have statistically significant means of sugar.
+I will perfect ANOVA with significance level of 0.05
+
+Conclusion: The p-value is 0.034 which leads me to reject the null hypothesis that the sugar content of all manufacturers is equal. There are at least 2 manufacturers whose mean sugar content is different.
+
+A Tukey HSD followup test indicates that there is a statistically significant difference in mean sugar content for :
+- N has on average 6.12 less grams of sugar than G
+- P has 6.94 grams more than N
+
+**Recommendation:** Manufacturer Nabisco (N) has on average less grams of sugar than Post (P) or General Mills (G). So if you had to reduce sugar and only go with one manufacturer, pick Nabisco.
+
+```{r}
+
+boxplot(sugarsG ~ mfr, data=cerealComp)
+
+#aov
+res.aov <- aov(sugarsG ~ mfr, data=cerealComp)
+summary(res.aov)
+
+#post hoc TukeyHD for pairwise-comparisons between means of groups
+TukeyHSD(res.aov)
+
+```
+
+### What is an ideal (for your health) breakfast cereal?
+- This question that depends on a person's dietary needs, but I will answer based on overall nutritional requirements.
+- I will first start by selecting on those cereals that were in **Cluster 2 (high Potassium and medium sodium).** According to Raman (2017), US adults often do not get the required amount of potassium which is about 3500 mg. It is generally advised to lower sodium intake, so limiting cereals in this way makes sense.
+- Next, looking at the remaing cereals let's only select those with **high protein and low sugar.** The recommended intake of sugar is about 25 grams per day, so limiting your cereal to those under 10 mg makes sense as well.
+#### **After this result there are only 3 cereals left that meet these criterion - 100% Bran, All-Bran, and All-Bran with Extra Fiber.**
+
+**Recommendation:** These 3 cereals are below average in calories, above average in protein, below average in fat, well above average in fiber, below average in carbs, will provide you with 25% of daily vitamins, and have less cups per serving (which means you could eat more!)
+
+
+
+```{r}
+cerealClusters <- cbind(cerealComp, k3$cluster)
+
+#change name of cluster
+colnames(cerealClusters)[16] <- "cluster"
+
+# pick out only cereals in cluster 2, which are higher in potassium and medium in sodium
+lowSo_highPot <- cerealClusters[cerealClusters$cluster == 2, ]
+
+
+# of those, which cereals give the most amount of protein and least amount of sugar?
+lowSo_highPot %>%
+ggplot(aes(x=sugarsG, y=proteinG))+
+  geom_point(alpha=0.5) + 
+  geom_jitter() +
+  ggtitle("Protein vs Sugar of Cereals in Cluster 2 Only")
+
+
+library(kableExtra)
+library(knitr)
+
+lowSugHP <- lowSo_highPot[lowSo_highPot$proteinG >= 3.5 & lowSo_highPot$sugarsG <10, ]
+kable(lowSugHP)
+```
+
+References
+
+Raman, R. (2017). How much potassium do you need per day? Retrieved from https://www.healthline.com/nutrition/how-much-potassium-per-day#section5
